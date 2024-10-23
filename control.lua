@@ -126,10 +126,10 @@ end
 --- @param entity LuaEntity
 --- @return boolean
 local function can_wires_reach(entity)
-    local neighbours = copper_wire_types[entity.type] and entity.neighbours or entity.circuit_connected_entities
-    for _, wire_type in pairs(neighbours) do
-        for _, neighbour in pairs(wire_type) do
-            if not entity.can_wires_reach(neighbour) then return false end
+    local wire_connectors = entity.get_wire_connectors(false) or {}
+    for _, wire_connector in pairs(wire_connectors) do
+        for _, connection in pairs(wire_connector.connections) do
+            if not wire_connector.can_wire_reach(connection.target) then return false end
         end
     end
     return true
@@ -263,7 +263,8 @@ local function move_entity(event)
         end
 
         ---  Check if all the wires can reach.
-        if entity.circuit_connected_entities then
+        local wire_connectors = entity.get_wire_connectors(false) or {}
+        if table_size(wire_connectors) > 0 then
             if not final_teleportation then entity.teleport(target_pos) end
             final_teleportation = true
             if not can_wires_reach(entity) then return teleport_and_update(start_pos, false, { "picker-dollies.wires-maxed" }) end
