@@ -33,19 +33,33 @@ end
 local copper_wire_types = array_to_dict { "electric-pole", "power-switch" }
 
 --- Entity types that can not be moved even in cheat_mode.
-local blacklist_types = array_to_dict { "item-request-proxy", "rocket-silo-rocket", "resource", "construction-robot",
-    "logistic-robot", "rocket", "tile-ghost", "item-entity", "straight-rail", "curved-rail", "locomotive", "cargo-wagon",
-    "artillery-wagon", "fluid-wagon"
+local blacklist_types = array_to_dict {
+    "straight-rail", "half-diagonal-rail", "curved-rail-a", "curved-rail-b", "legacy-straight-rail", "legacy-curved-rail",
+    "train-stop", "rail-signal", "rail-chain-signal",
+    "locomotive", "cargo-wagon", "artillery-wagon", "fluid-wagon",
+    "logistic-robot", "construction-robot", "combat-robot",
+    "rocket-silo", "cargo-landing-pad", "rocket-silo-rocket", "rocket-silo-rocket-shadow", "cargo-pod",
+
+    "linked-container", "linked-belt", "temporary-container",
+    "resource", "cliff", "tree",
+    "rail-remnants", "explosion", "particle-source", "fire", "sticker", "stream", "beam",
+    "deconstructible-tile-proxy",
+    "elevated-curved-rail-a", "elevated-curved-rail-b", "elevated-half-diagonal-rail", "elevated-straight-rail",
+    "rail-ramp", "rail-support",
+    "entity-ghost", "item-entity", "item-request-proxy",
+    "spider-leg", "tile-ghost",
+    "artillery-flare", "projectile",
+    "speech-bubble", "smoke-with-trigger", "arrow", "highlight-box",
 }
 
 --- Entity types that can only be moved in cheat_mode.
-local blacklist_cheat_types = array_to_dict { "character", "unit", "unit-spawner", "car", "spider-vehicle" }
+local blacklist_cheat_types = array_to_dict { "character", "unit", "unit-spawner", "car", "spider-vehicle", "simple-entity", "corpse", "character-corpse" }
 
 --- Default entity names to blacklist from moving. Stored in global and can be modified by the user via interface.
 local blacklist_names = array_to_dict { "pumpjack" }
 
 --- Default entity names with none-square bounding boxes. Stored in global and can be modified by the user via interface.
-local oblong_names = array_to_dict { "arithmetic-combinator", "decider-combinator", "pump" }
+local oblong_names = array_to_dict { "pump", "arithmetic-combinator", "decider-combinator", "selector-combinator", }
 
 local input_to_direction = {
     ["dolly-move-north"] = defines.direction.north,
