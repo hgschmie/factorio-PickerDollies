@@ -36,10 +36,10 @@ end
 --- @param entity_name string
 --- @return boolean
 interface["add_oblong_name"] = function(entity_name)
-    global.oblong_names = global.oblong_names or {}
-    local proto = game.entity_prototypes[entity_name]
+    storage.oblong_names = storage.oblong_names or {}
+    local proto = prototypes.entity[entity_name]
     if proto then
-        global.oblong_names[entity_name] = true
+        storage.oblong_names[entity_name] = true
         return true
     end
     return false
@@ -48,9 +48,9 @@ end
 --- @param entity_name string
 --- @return boolean
 interface["remove_oblong_name"] = function(entity_name)
-    global.oblong_names = global.oblong_names or {}
-    if global.oblong_names[entity_name] then
-        global.oblong_names[entity_name] = nil
+    storage.oblong_names = storage.oblong_names or {}
+    if storage.oblong_names[entity_name] then
+        storage.oblong_names[entity_name] = nil
         return true
     end
     return false
@@ -58,17 +58,17 @@ end
 
 --- @return {[string]: true}
 interface["get_oblong_names"] = function()
-    global.oblong_names = global.oblong_names or {}
-    return global.oblong_names
+    storage.oblong_names = storage.oblong_names or {}
+    return storage.oblong_names
 end
 
 --- @param entity_name string
 --- @return boolean
 interface["add_blacklist_name"] = function(entity_name)
-    global.blacklist_names = global.blacklist_names or {}
-    local proto = game.entity_prototypes[entity_name]
+    storage.blacklist_names = storage.blacklist_names or {}
+    local proto = prototypes.entity[entity_name]
     if proto then
-        global.blacklist_names[entity_name] = true
+        storage.blacklist_names[entity_name] = true
         return true
     end
     return false
@@ -77,9 +77,9 @@ end
 --- @param entity_name string
 --- @return boolean
 interface["remove_blacklist_name"] = function(entity_name)
-    global.blacklist_names = global.blacklist_names or {}
-    if global.blacklist_names[entity_name] then
-        global.blacklist_names[entity_name] = nil
+    storage.blacklist_names = storage.blacklist_names or {}
+    if storage.blacklist_names[entity_name] then
+        storage.blacklist_names[entity_name] = nil
         return true
     end
     return false
@@ -87,8 +87,8 @@ end
 
 --- @return {[string]: true}
 interface["get_blacklist_names"] = function()
-    global.blacklist_names = global.blacklist_names or {}
-    return global.blacklist_names
+    storage.blacklist_names = storage.blacklist_names or {}
+    return storage.blacklist_names
 end
 
 remote.add_interface(script.mod_name, interface)
