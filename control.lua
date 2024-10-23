@@ -89,7 +89,7 @@ end
 --- @param cheat_mode? boolean
 --- @return boolean
 local function is_blacklisted(entity, cheat_mode)
-    local listed = blacklist_types[entity.type] or global.blacklist_names[entity.name]
+    local listed = blacklist_types[entity.type] or storage.blacklist_names[entity.name]
     if cheat_mode then return listed end
     return listed or blacklist_cheat_types[entity.type]
 end
@@ -298,7 +298,7 @@ local function try_rotate_oblong_entity(event)
     local save_time = player.mod_settings["dolly-save-entity"].value --[[@as uint]]
     local entity = get_saved_entity(player, pdata, event.tick, save_time)
     if not entity then return end
-    if not (global.oblong_names[entity.name] and not is_blacklisted(entity)) then return end
+    if not (storage.oblong_names[entity.name] and not is_blacklisted(entity)) then return end
     if not (player.cheat_mode or player.can_reach_entity(entity)) then return end
 
     save_entity(pdata, entity, event.tick, save_time)
@@ -329,22 +329,22 @@ end
 Event.register({ "dolly-rotate-saved", "dolly-rotate-saved-reverse" }, rotate_saved_dolly)
 
 local function on_init()
-    global.blacklist_names = table_copy(blacklist_names)
-    global.oblong_names = table_copy(oblong_names)
+    storage.blacklist_names = table_copy(blacklist_names)
+    storage.oblong_names = table_copy(oblong_names)
 end
 Event.register(Event.core_events.on_init, on_init)
 
 local function on_configuration_changed()
     --- Make sure the blacklists exist.
-    global.blacklist_names = global.blacklist_names or table_copy(blacklist_names)
-    global.oblong_names = global.oblong_names or table_copy(oblong_names)
+    storage.blacklist_names = storage.blacklist_names or table_copy(blacklist_names)
+    storage.oblong_names = storage.oblong_names or table_copy(oblong_names)
 
     --- Remove any invalid prototypes from the blacklists.
-    for name in pairs(global.blacklist_names) do
-        if not game.entity_prototypes[name] then global.blacklist_names[name] = nil end
+    for name in pairs(storage.blacklist_names) do
+        if not prototypes.entity[name] then storage.blacklist_names[name] = nil end
     end
-    for name in pairs(global.oblong_names) do
-        if not game.entity_prototypes[name] then global.oblong_names[name] = nil end
+    for name in pairs(storage.oblong_names) do
+        if not prototypes.entity[name] then storage.oblong_names[name] = nil end
     end
 end
 Event.register(Event.core_events.on_configuration_changed, on_configuration_changed)
