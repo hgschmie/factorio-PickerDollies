@@ -145,148 +145,151 @@ local function move_entity(event)
 
     local save_time = event.save_time or player.mod_settings["dolly-save-entity"].value --[[@as uint]]
     local entity = get_saved_entity(player, pdata, event.tick, save_time)
-    if entity then
-        local cheat_mode = player.cheat_mode
+    if not entity then return end
 
-        --- Check non cheat_mode player in range.
-        if not (cheat_mode or player.can_reach_entity(entity)) then
-            return flying_text(player, { "cant-reach" }, entity.position)
-        end
+    local cheat_mode = player.cheat_mode
 
-        --- Check if entity is blacklisted, cheat_mode allows moving more entities.
-        if is_blacklisted(entity, cheat_mode) then
-            local text = { "picker-dollies.cant-be-teleported", entity.localised_name }
-            return flying_text(player, text, entity.position)
-        end
-
-        --- Only move entities of the same force unless cheat_mode is enabled.
-        local entity_force = entity.force --[[@as LuaForce]]
-        if not (cheat_mode or entity_force == player.force) then
-            local text = { "picker-dollies.wrong-force", entity.localised_name }
-            return flying_text(player, text, entity.position)
-        end
-
-        local surface = entity.surface
-        local start_pos = Position(event.start_pos or entity.position) -- Where we started from in case we have to return it
-
-        --- Make sure there is not a rocket present.
-        --- @todo Move the rocket-silo-rocket to the correct spot.
-        if surface.find_entity("rocket-silo-rocket", start_pos) then
-            return flying_text(player, { "picker-dollies.rocket-present", entity.localised_name }, start_pos)
-        end
-
-        local prototype = entity.prototype
-        local direction = event.direction or input_to_direction[event.input_name] -- Direction to move the source
-        local distance = (event.distance or 1) * prototype.building_grid_bit_shift -- Distance to move the source, defaults to 1
-        local target_direction = event.target_direction or entity.direction
-        local target_pos = start_pos:translate(direction, distance) -- Where we want to go too
-        local target_box = Area(entity.selection_box):translate(direction, distance) -- Target selection box location
-        local out_of_the_way = start_pos:translate(Direction.opposite_direction(direction), event.tiles_away or 20)
-        local final_teleportation = false -- Handling teleportion after an entity has been moved into place and checked again
-
-        ---  Try retries times to teleport the entity out of the way.
-        --- @api LuaEntity:can_be_teleported
-        local retries = 5
-        while not entity.teleport(out_of_the_way) do
-            if retries <= 1 then
-                return flying_text(player, { "picker-dollies.cant-be-teleported", entity.localised_name }, entity.position)
-            end
-            retries = retries - 1
-            out_of_the_way = out_of_the_way:add { x = retries, y = retries }
-        end
-
-        --- Entity was teleportable and is out of the way, Check to see if it fits in the new spot.
-        if target_direction then entity.direction = target_direction end -- Rotation for oblong
-        save_entity(pdata, entity, event.tick, save_time)
-
-        --- Update everything after teleporting. This includes moving rocket-silo-rocket, item-entity, item-request-proxies, fluidbox.
-        --- @param pos MapPosition
-        --- @param raise boolean Teleportation was successfull raise event
-        --- @param reason? LocalisedString
-        local function teleport_and_update(pos, raise, reason)
-            if entity.last_user then entity.last_user = player end
-
-            --- Final teleport into position. Ignore final_teleportation if we are not raising
-            if not (raise and final_teleportation) then
-                if event.start_direction then
-                    entity.direction = event.start_direction
-                end
-                entity.teleport(pos)
-            end
-
-            if not raise then return flying_text(player, reason, pos) end
-
-            --- At this point the entity should be able to be teleported into a new position.
-            --- Hoover up items, Move the proxy, Update any connections, Raise the dolly_moved event.
-
-            --- Mine or move out of the way any items on the ground.
-            local items_on_ground = surface.find_entities_filtered { type = "item-entity", area = target_box }
-            for _, item_entity in pairs(items_on_ground) do
-                if item_entity.valid and not player.mine_entity(item_entity) then
-                    --- @todo this doesn't do anything.......
-                    local item_pos = item_entity.position
-                    -- local valid_pos = surface.find_non_colliding_position("item-on-ground", item_pos, 0, .20) or item_pos
-                    item_entity.teleport(item_pos)
-                end
-            end
-
-            --- Move the proxy to the correct position.
-            local proxy = surface.find_entity("item-request-proxy", start_pos)
-            if proxy and proxy.valid then proxy.teleport(entity.position) end
-
-            --- @todo Move any rocket-silo-rockets instead of blocking.
-
-            --- Update all connections.
-            --- @todo Only add updateable_entities to a list.
-            local updateable_entities = surface.find_entities_filtered { area = target_box:expand(32), force = entity_force }
-            for _, updateable in pairs(updateable_entities) do updateable.update_connections() end
-
-            --- @type EventData.PickerDollies.dolly_moved_event
-            local event_data = { player_index = player.index, moved_entity = entity, start_pos = start_pos }
-            script.raise_event(Event.generate_event_name("dolly_moved"), event_data)
-            player.play_sound { path = "utility/rotated_medium" }
-        end
-
-        local can_place_params = {
-            name = entity.name == "entity-ghost" and entity.ghost_name or entity.name,
-            position = target_pos,
-            direction = target_direction,
-            force = entity_force,
-            build_check_type = defines.build_check_type.manual, -- Won't allow placing on ghosts/deconstruction proxies
-            inner_name = entity.name == "entity-ghost" and entity.ghost_name
-        }
-
-        --- Allow collisions if the player has the setting enabled.
-        local ignore_collisions = settings.global["dolly-allow-ignore-collisions"].value and player.mod_settings["dolly-ignore-collisions"].value
-        if not ignore_collisions then
-            if not (surface.can_place_entity(can_place_params) and not surface.find_entity("entity-ghost", target_pos)) then
-                return teleport_and_update(start_pos, false, { "picker-dollies.no-room", entity.localised_name })
-            end
-        end
-
-        ---  Check if all the wires can reach.
-        local wire_connectors = entity.get_wire_connectors(false) or {}
-        if table_size(wire_connectors) > 0 then
-            if not final_teleportation then entity.teleport(target_pos) end
-            final_teleportation = true
-            if not can_wires_reach(entity) then return teleport_and_update(start_pos, false, { "picker-dollies.wires-maxed" }) end
-        end
-
-        --- mining-drill check if there is ore in the area.
-        if entity.type == "mining-drill" then
-            if not final_teleportation then entity.teleport(target_pos) end
-            final_teleportation = true
-            local area = target_pos:expand_to_area(prototype.mining_drill_radius) --[[@as BoundingBox]]
-            local resource_name = entity.mining_target and entity.mining_target.name or nil
-            local count = entity.surface.count_entities_filtered { area = area, type = "resource", name = resource_name }
-            if count == 0 then
-                return teleport_and_update(start_pos, false, { "picker-dollies.off-ore-patch", entity.localised_name, resource_name })
-            end
-        end
-
-        return teleport_and_update(target_pos, true)
+    --- Check non cheat_mode player in range.
+    if not (cheat_mode or player.can_reach_entity(entity)) then
+        return flying_text(player, { "cant-reach" }, entity.position)
     end
+
+    --- Check if entity is blacklisted, cheat_mode allows moving more entities.
+    if is_blacklisted(entity, cheat_mode) then
+        local text = { "picker-dollies.cant-be-teleported", entity.localised_name }
+        return flying_text(player, text, entity.position)
+    end
+
+    --- Only move entities of the same force unless cheat_mode is enabled.
+    local entity_force = entity.force --[[@as LuaForce]]
+    if not (cheat_mode or entity_force == player.force) then
+        local text = { "picker-dollies.wrong-force", entity.localised_name }
+        return flying_text(player, text, entity.position)
+    end
+
+    local surface = entity.surface
+    local start_pos = Position(event.start_pos or entity.position) -- Where we started from in case we have to return it
+
+    --- Make sure there is not a rocket present.
+    --- @todo Move the rocket-silo-rocket to the correct spot.
+    if surface.find_entity("rocket-silo-rocket", start_pos) then
+        return flying_text(player, { "picker-dollies.rocket-present", entity.localised_name }, start_pos)
+    end
+
+    local prototype = entity.prototype
+    local direction = event.direction or input_to_direction[event.input_name] -- Direction to move the source
+    if not direction then return end
+
+    local distance = (event.distance or 1) * prototype.building_grid_bit_shift   -- Distance to move the source, defaults to 1
+    local target_direction = event.target_direction or entity.direction
+    local target_pos = start_pos:translate(direction, distance)                  -- Where we want to go too
+    local target_box = Area(entity.selection_box):translate(direction, distance) -- Target selection box location
+    local out_of_the_way = start_pos:translate(Direction.opposite_direction(direction), event.tiles_away or 20)
+    local final_teleportation = false                                            -- Handling teleportion after an entity has been moved into place and checked again
+
+    ---  Try retries times to teleport the entity out of the way.
+    --- @api LuaEntity:can_be_teleported
+    local retries = 5
+    while not entity.teleport(out_of_the_way) do
+        if retries <= 1 then
+            return flying_text(player, { "picker-dollies.cant-be-teleported", entity.localised_name }, entity.position)
+        end
+        retries = retries - 1
+        out_of_the_way = out_of_the_way:add { x = retries, y = retries }
+    end
+
+    --- Entity was teleportable and is out of the way, Check to see if it fits in the new spot.
+    if target_direction then entity.direction = target_direction end -- Rotation for oblong
+    save_entity(pdata, entity, event.tick, save_time)
+
+    --- Update everything after teleporting. This includes moving rocket-silo-rocket, item-entity, item-request-proxies, fluidbox.
+    --- @param pos MapPosition
+    --- @param raise boolean Teleportation was successfull raise event
+    --- @param reason? LocalisedString
+    local function teleport_and_update(pos, raise, reason)
+        if entity.last_user then entity.last_user = player end
+
+        --- Final teleport into position. Ignore final_teleportation if we are not raising
+        if not (raise and final_teleportation) then
+            if event.start_direction then
+                entity.direction = event.start_direction
+            end
+            entity.teleport(pos)
+        end
+
+        if not raise then return flying_text(player, reason, pos) end
+
+        --- At this point the entity should be able to be teleported into a new position.
+        --- Hoover up items, Move the proxy, Update any connections, Raise the dolly_moved event.
+
+        --- Mine or move out of the way any items on the ground.
+        local items_on_ground = surface.find_entities_filtered { type = "item-entity", area = target_box }
+        for _, item_entity in pairs(items_on_ground) do
+            if item_entity.valid and not player.mine_entity(item_entity) then
+                --- @todo this doesn't do anything.......
+                local item_pos = item_entity.position
+                -- local valid_pos = surface.find_non_colliding_position("item-on-ground", item_pos, 0, .20) or item_pos
+                item_entity.teleport(item_pos)
+            end
+        end
+
+        --- Move the proxy to the correct position.
+        local proxy = surface.find_entity("item-request-proxy", start_pos)
+        if proxy and proxy.valid then proxy.teleport(entity.position) end
+
+        --- @todo Move any rocket-silo-rockets instead of blocking.
+
+        --- Update all connections.
+        --- @todo Only add updateable_entities to a list.
+        local updateable_entities = surface.find_entities_filtered { area = target_box:expand(32), force = entity_force }
+        for _, updateable in pairs(updateable_entities) do updateable.update_connections() end
+
+        --- @type EventData.PickerDollies.dolly_moved_event
+        local event_data = { player_index = player.index, moved_entity = entity, start_pos = start_pos }
+        script.raise_event(Event.generate_event_name("dolly_moved"), event_data)
+        player.play_sound { path = "utility/rotated_medium" }
+    end
+
+    local can_place_params = {
+        name = entity.name == "entity-ghost" and entity.ghost_name or entity.name,
+        position = target_pos,
+        direction = target_direction,
+        force = entity_force,
+        build_check_type = defines.build_check_type.manual, -- Won't allow placing on ghosts/deconstruction proxies
+        inner_name = entity.name == "entity-ghost" and entity.ghost_name
+    }
+
+    --- Allow collisions if the player has the setting enabled.
+    local ignore_collisions = settings.global["dolly-allow-ignore-collisions"].value and player.mod_settings["dolly-ignore-collisions"].value
+    if not ignore_collisions then
+        if not (surface.can_place_entity(can_place_params) and not surface.find_entity("entity-ghost", target_pos)) then
+            return teleport_and_update(start_pos, false, { "picker-dollies.no-room", entity.localised_name })
+        end
+    end
+
+    ---  Check if all the wires can reach.
+    local wire_connectors = entity.get_wire_connectors(false) or {}
+    if table_size(wire_connectors) > 0 then
+        if not final_teleportation then entity.teleport(target_pos) end
+        final_teleportation = true
+        if not can_wires_reach(entity) then return teleport_and_update(start_pos, false, { "picker-dollies.wires-maxed" }) end
+    end
+
+    --- mining-drill check if there is ore in the area.
+    if entity.type == "mining-drill" then
+        if not final_teleportation then entity.teleport(target_pos) end
+        final_teleportation = true
+        local area = target_pos:expand_to_area(prototype.mining_drill_radius) --[[@as BoundingBox]]
+        local resource_name = entity.mining_target and entity.mining_target.name or nil
+        local count = entity.surface.count_entities_filtered { area = area, type = "resource", name = resource_name }
+        if count == 0 then
+            return teleport_and_update(start_pos, false, { "picker-dollies.off-ore-patch", entity.localised_name, resource_name })
+        end
+    end
+
+    return teleport_and_update(target_pos, true)
 end
+
 Event.register({ "dolly-move-north", "dolly-move-east", "dolly-move-south", "dolly-move-west" }, move_entity)
 
 --- @param event EventData.PickerDollies.CustomInputEvent
